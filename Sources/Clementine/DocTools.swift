@@ -196,7 +196,8 @@ enum DocTools {
             return NSAttributedString(string: try PDFTools.open(url).string ?? "")
         }
         if ext == "epub" { return try EpubTools.read(url) }
-        if ["pages", "key", "numbers", "pptx", "xlsx"].contains(ext) {
+        if ["pages", "key", "numbers"].contains(ext) { return try IWorkReader.attributed(url) }
+        if ["pptx", "xlsx"].contains(ext) {
             throw ClementineError("Usa la conversione dedicata per questo formato")
         }
         return try NSAttributedString(url: url, options: [:], documentAttributes: nil)
@@ -351,16 +352,14 @@ enum ArchiveTools {
         }
     }
 
-    static func zip(_ urls: [URL]) throws -> URL {
+    /// ZIP with compression level 0-9 and optional password (classic ZipCrypto, opens everywhere).
+    static func zip(_ urls: [URL], level: Int = 6, password: String = "") throws -> URL {
         let name = urls.count == 1 ? urls[0].lastPathComponent : "Archivio"
         let out = Output.url(for: urls[0].deletingLastPathComponent().appendingPathComponent(name), ext: "zip")
-        if urls.count == 1 {
-            try shell("/usr/bin/ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", urls[0].path, out.path])
-        } else {
-            // zip keeps relative names when run from the common folder.
-            try shell("/usr/bin/zip", ["-r", "-q", out.path] + urls.map { $0.lastPathComponent },
-                      cwd: urls[0].deletingLastPathComponent())
-        }
+        var args = ["-r", "-q", "-y", "-\(min(max(level, 0), 9))"]
+        if !password.isEmpty { args += ["-P", password] }
+        args += [out.path] + urls.map { $0.lastPathComponent } + ["-x", "*.DS_Store", "-x", "__MACOSX/*"]
+        try shell("/usr/bin/zip", args, cwd: urls[0].deletingLastPathComponent())
         return out
     }
 

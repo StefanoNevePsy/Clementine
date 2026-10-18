@@ -65,6 +65,14 @@ enum Catalog {
         }
     }
 
+    /// Opens the interactive waveform/timeline editor (one file at a time).
+    private static func mediaEditor(_ title: String, _ symbol: String, _ mode: MediaEditMode) -> Operation {
+        Operation(title: title, symbol: symbol, instant: true) { files, _, _ in
+            await MainActor.run { for f in files.prefix(4) { MediaEditorWindow.show(f, mode: mode) } }
+            return []
+        }
+    }
+
     /// Opens the photo editor on the selected images.
     private static func editor(_ title: String, _ symbol: String, _ tab: EditorTab) -> Operation {
         Operation(title: title, symbol: symbol, instant: true) { files, _, _ in
@@ -214,35 +222,16 @@ enum Catalog {
                           Param(key: "pct", label: "Oppure % della dimensione originale", defaultValue: "40")]) { url, v, job in
                 try await MediaTools.compress(url, targetMB: v.double("mb"), percent: v.double("pct"), job: job)
             },
-            each("Taglia", "scissors",
-                 params: [Param(key: "start", label: "Inizio (secondi o mm:ss)", defaultValue: "0"),
-                          Param(key: "end", label: "Fine (secondi o mm:ss)", defaultValue: "0:30")]) { url, v, job in
-                try await MediaTools.trim(url, start: v.seconds("start"), end: v.seconds("end"), job: job)
-            },
+            mediaEditor("Taglia", "scissors", .trim),
             videoEditor("Ritaglia", "crop", .crop),
             videoEditor("Oscura", "eye.slash.circle", .redact),
-            each("Velocità", "speedometer",
-                 params: [Param(key: "f", label: "Fattore (0.5 = rallenta, 2 = doppia)", defaultValue: "1.5")]) { url, v, job in
-                try await MediaTools.speed(url, factor: v.double("f", 1), job: job)
-            },
+            mediaEditor("Velocità", "speedometer", .speed),
+            mediaEditor("Fotogrammi", "photo.stack", .frames),
+            mediaEditor("Dividi", "square.split.2x1", .split),
+            mediaEditor("Bleep", "exclamationmark.bubble", .bleep),
             each("Riduci a 720p", "rectangle.compress.vertical") { url, _, job in try await MediaTools.resize(url, height: 720, job: job) },
             each("Togli audio", "speaker.slash") { url, _, job in try await MediaTools.mute(url, job: job) },
             each("Estrai audio", "waveform") { url, _, job in try await MediaTools.extractAudio(url, job: job) },
-            each("Fotogramma", "camera", params: [Param(key: "t", label: "Istante (secondi o mm:ss)", defaultValue: "0")]) { url, v, _ in
-                try await MediaTools.snapshot(url, at: v.seconds("t"))
-            },
-            eachMany("Fotogrammi", "photo.stack",
-                     params: [Param(key: "times", label: "Istanti separati da virgola (es. 0:05, 1:20) — vuoto per usare l'intervallo", defaultValue: ""),
-                              Param(key: "every", label: "Oppure uno ogni N secondi", defaultValue: "5")]) { url, v, job in
-                try await MediaTools.frames(url, interval: v.double("every", 5), times: timeList(v["times"]), job: job)
-            },
-            eachMany("Dividi", "square.split.2x1",
-                     params: [Param(key: "points", label: "Punti di taglio separati da virgola (es. 0:30, 1:45)", defaultValue: ""),
-                              Param(key: "s", label: "Oppure parti da N secondi", defaultValue: "60")]) { url, v, job in
-                let points = timeList(v["points"])
-                if !points.isEmpty { return try await MediaTools.split(url, at: points, job: job) }
-                return try await MediaTools.split(url, segmentSeconds: v.seconds("s"), job: job)
-            },
             each("Togli metadati", "eye.slash") { url, _, job in try await MediaTools.stripMetadata(url, job: job) },
             info("Metadati", "info.circle") { await MediaTools.metadataText($0) },
         ]
@@ -253,23 +242,17 @@ enum Catalog {
     static func audioTools(many: Bool) -> [Operation] {
         guard FFmpeg.isAvailable else { return [info("Metadati", "info.circle") { await MediaTools.metadataText($0) }] }
         var ops: [Operation] = [
+            mediaEditor("Taglia", "scissors", .trim),
+            mediaEditor("Bleep", "exclamationmark.bubble", .bleep),
+            mediaEditor("Velocità", "speedometer", .speed),
+            mediaEditor("Dividi", "square.split.2x1", .split),
             each("Normalizza", "slider.vertical.3") { url, _, job in
                 try await MediaTools.audioFilter(url, filter: "loudnorm=I=-16:TP=-1.5:LRA=11", suffix: "-normalizzato", job: job)
-            },
-            each("Taglia", "scissors",
-                 params: [Param(key: "start", label: "Inizio (secondi o mm:ss)", defaultValue: "0"),
-                          Param(key: "end", label: "Fine (secondi o mm:ss)", defaultValue: "0:30")]) { url, v, job in
-                try await MediaTools.trim(url, start: v.seconds("start"), end: v.seconds("end"), job: job)
             },
             each("Comprimi", "arrow.down.right.and.arrow.up.left",
                  params: [Param(key: "mb", label: "Dimensione finale (MB) — vuoto per usare la %", defaultValue: ""),
                           Param(key: "pct", label: "Oppure % della dimensione originale", defaultValue: "50")]) { url, v, job in
                 try await MediaTools.compress(url, targetMB: v.double("mb"), percent: v.double("pct"), job: job)
-            },
-            each("Bleep", "exclamationmark.bubble",
-                 params: [Param(key: "start", label: "Inizio censura (secondi o mm:ss)", defaultValue: "0"),
-                          Param(key: "end", label: "Fine censura", defaultValue: "1")]) { url, v, job in
-                try await MediaTools.bleep(url, start: v.seconds("start"), end: v.seconds("end"), job: job)
             },
             each("Canali", "speaker.wave.2",
                  params: [Param(key: "layout", label: "Uscita: mono o stereo", defaultValue: "stereo"),
@@ -291,10 +274,6 @@ enum Catalog {
                 return try await MediaTools.visualizer(url, style: (v["style"] ?? "onda").lowercased(), color: v["color"] ?? "FF8A1F",
                                                        background: bgPath.isEmpty ? nil : URL(fileURLWithPath: bgPath),
                                                        portrait: (v["format"] ?? "").lowercased().hasPrefix("v"), job: job)
-            },
-            each("Velocità", "speedometer",
-                 params: [Param(key: "f", label: "Fattore (0.5 = rallenta, 2 = doppia)", defaultValue: "1.25")]) { url, v, job in
-                try await MediaTools.speed(url, factor: v.double("f", 1), job: job)
             },
             each("Riduci rumore", "waveform.badge.minus") { url, _, job in
                 try await MediaTools.audioFilter(url, filter: "afftdn=nf=-25", suffix: "-pulito", job: job)
@@ -364,7 +343,7 @@ enum Catalog {
     static func docConvert(excluding ext: String) -> [Operation] {
         if ext == "pages" {
             var ops = ["pdf", "docx", "epub", "txt", "rtf"].map { f in
-                each(f.uppercased(), "doc.text") { url, _, _ in try await OfficeTools.convert(url, to: f) }
+            each(f.uppercased(), "doc.text") { url, _, _ in try await OfficeTools.convert(url, to: f) }
             }
             ops.append(each("Anteprima", "eye") { url, _, _ in try OfficeTools.iWorkPreview(url) })
             return ops
@@ -397,6 +376,7 @@ enum Catalog {
             ops.append(each("Anteprima", "eye") { url, _, _ in try OfficeTools.iWorkPreview(url) })
         }
         if ext == "pptx" { ops.append(each("TXT", "doc.plaintext") { url, _, _ in try OfficeTools.pptxText(url) }) }
+        if ext == "key" { ops.append(each("TXT", "doc.plaintext") { url, _, _ in try await DocTools.convert(url, to: "txt") }) }
         return ops
     }
 
@@ -428,12 +408,32 @@ enum Catalog {
 
     static func archiveOps() -> [Operation] {
         [each("Estrai", "archivebox") { url, _, _ in try ArchiveTools.extract(url) },
+         combined("Converti in ZIP", "doc.zipper") { urls, _, _ in
+             // Re-pack any archive (RAR, 7z, TAR…) as ZIP.
+             var outs: [URL] = []
+             for u in urls {
+                 let folder = try ArchiveTools.extract(u)
+                 let zip = try ArchiveTools.zip([folder])
+                 try? FileManager.default.removeItem(at: folder)
+                 outs.append(zip)
+             }
+             return outs[0]
+         },
          info("Contenuto", "list.bullet") { try ArchiveTools.list($0) }]
     }
 
     static func genericOps() -> [Operation] {
         [combined("ZIP", "doc.zipper") { urls, _, _ in try ArchiveTools.zip(urls) },
+         zipOptions(),
          combined("TAR.GZ", "archivebox") { urls, _, _ in try ArchiveTools.tarGz(urls) }]
+    }
+
+    static func zipOptions() -> Operation {
+        combined("ZIP con opzioni", "lock.doc",
+                 params: [Param(key: "pw", label: "Password (facoltativa)", defaultValue: ""),
+                          Param(key: "lvl", label: "Compressione: 0 = nessuna (veloce) … 9 = massima", defaultValue: "6")]) { urls, v, _ in
+            try ArchiveTools.zip(urls, level: Int(v.double("lvl", 6)), password: v["pw"] ?? "")
+        }
     }
 
     // MARK: Actions
@@ -467,6 +467,7 @@ enum Catalog {
             instant("Mostra", "magnifyingglass") { files in NSWorkspace.shared.activateFileViewerSelecting(files) },
             instant("Fluttua", "pin") { files in FloatingShelf.shared.add(files) },
             combined("ZIP", "doc.zipper") { urls, _, _ in try ArchiveTools.zip(urls) },
+            zipOptions(),
         ]
     }
 

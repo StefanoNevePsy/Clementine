@@ -112,6 +112,21 @@ enum OfficeTools {
             try FileManager.default.moveItem(at: produced, to: out)
             return out
         }
+        // Native engine: reads iWork files directly (text content, no layout).
+        let iWork = ["pages", "key", "numbers"].contains(url.pathExtension.lowercased())
+        if iWork, ["pdf", "docx", "txt", "rtf", "html", "md", "epub", "odt"].contains(ext) {
+            return try await DocTools.convert(url, to: ext)
+        }
+        if iWork, ext == "csv" || ext == "xlsx" {
+            // Without Numbers we recover the cell texts, one per row.
+            let cells = try IWorkReader.text(url).components(separatedBy: "\n").map { [$0] }
+            if ext == "csv" {
+                try SheetTools.csv(cells).write(to: out, atomically: true, encoding: .utf8)
+            } else {
+                try SheetTools.writeXLSX([(url.deletingPathExtension().lastPathComponent, cells)], to: out)
+            }
+            return out
+        }
         throw ClementineError("Per convertire questo file serve \(app.name) (gratis sul Mac App Store) oppure LibreOffice.")
     }
 

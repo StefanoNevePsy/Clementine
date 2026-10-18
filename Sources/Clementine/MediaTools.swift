@@ -439,3 +439,23 @@ extension MediaTools {
         return out
     }
 }
+
+extension MediaTools {
+    /// Covers several time ranges with a 1 kHz tone.
+    static func bleep(_ url: URL, ranges: [TimeRange], job: Job?) async throws -> URL {
+        let valid = ranges.filter { $0.end > $0.start }
+        guard !valid.isEmpty else { throw ClementineError("Aggiungi almeno un tratto da coprire") }
+        let ext = url.pathExtension.lowercased()
+        let out = Output.url(for: url, ext: ext, suffix: "-bleep")
+        let inside = valid.map { "between(t,\($0.start),\($0.end))" }.joined(separator: "+")
+        let total = (FFmpeg.duration(of: url) ?? (valid.map(\.end).max() ?? 0)) + 1
+        let filter = "[0:a]volume=enable='\(inside)':volume=0[muted];" +
+            "sine=f=1000:d=\(total),volume=0.3,volume=enable='not(\(inside))':volume=0[tone];" +
+            "[muted][tone]amix=inputs=2:duration=first:normalize=0[a]"
+        var args = ["-i", url.path, "-filter_complex", filter, "-map", "[a]"]
+        if FFmpeg.hasVideoStream(url) { args += ["-map", "0:v", "-c:v", "copy"] }
+        args += audioCodec(for: ext) + [out.path]
+        try await FFmpeg.run(args, duration: FFmpeg.duration(of: url), job: job)
+        return out
+    }
+}
