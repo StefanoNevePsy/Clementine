@@ -19,19 +19,16 @@ if [ -x Resources/ffmpeg ]; then
   cp Resources/ffmpeg "$APP/Contents/Resources/ffmpeg"
 fi
 
-# App icon from icon.svg (QuickLook can rasterize SVG on macOS).
-if command -v qlmanage >/dev/null && command -v iconutil >/dev/null; then
+# App icon from Resources/AppIcon.png (1024×1024, rendered from icon.svg).
+if [ -f Resources/AppIcon.png ] && command -v iconutil >/dev/null; then
   TMP="$(mktemp -d)"
-  qlmanage -t -s 1024 -o "$TMP" icon.svg >/dev/null 2>&1 || true
-  if [ -f "$TMP/icon.svg.png" ]; then
-    ICONSET="$TMP/AppIcon.iconset"
-    mkdir -p "$ICONSET"
-    for s in 16 32 128 256 512; do
-      sips -z $s $s "$TMP/icon.svg.png" --out "$ICONSET/icon_${s}x${s}.png" >/dev/null
-      sips -z $((s*2)) $((s*2)) "$TMP/icon.svg.png" --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null
-    done
-    iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns" || true
-  fi
+  ICONSET="$TMP/AppIcon.iconset"
+  mkdir -p "$ICONSET"
+  for s in 16 32 128 256 512; do
+    sips -z $s $s Resources/AppIcon.png --out "$ICONSET/icon_${s}x${s}.png" >/dev/null
+    sips -z $((s*2)) $((s*2)) Resources/AppIcon.png --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null
+  done
+  iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
   rm -rf "$TMP"
 fi
 

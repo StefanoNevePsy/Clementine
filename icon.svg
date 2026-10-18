@@ -1,1 +1,60 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="36" r="24" fill="#ff8a1f"/><circle cx="24" cy="28" r="6" fill="#ffb163" opacity=".7"/><path d="M32 12c2-6 8-8 14-7-2 6-7 9-14 7z" fill="#3fa34d"/><path d="M32 13v-6" stroke="#6b4b2a" stroke-width="3" stroke-linecap="round"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFF6EA"/>
+      <stop offset="1" stop-color="#FFE2C2"/>
+    </linearGradient>
+    <radialGradient id="peel" cx="0.42" cy="0.38" r="0.7">
+      <stop offset="0" stop-color="#FFB547"/>
+      <stop offset="0.7" stop-color="#FF8A1F"/>
+      <stop offset="1" stop-color="#E8620A"/>
+    </radialGradient>
+    <radialGradient id="pulp" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFD27A"/>
+      <stop offset="1" stop-color="#FF9F2E"/>
+    </radialGradient>
+    <linearGradient id="leaf" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7BC96F"/>
+      <stop offset="1" stop-color="#2F8F46"/>
+    </linearGradient>
+    <path id="seg" d="M512 512 L512 278 A234 234 0 0 1 677.5 346.5 Z"/>
+  </defs>
+
+  <!-- macOS rounded-square plate (824px body with margins) -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="none" stroke="#000" stroke-opacity="0.06" stroke-width="4"/>
+
+  <!-- soft shadow -->
+  <ellipse cx="512" cy="800" rx="250" ry="34" fill="#C2621A" opacity="0.18"/>
+
+  <!-- peel -->
+  <circle cx="512" cy="530" r="290" fill="url(#peel)"/>
+  <!-- white pith -->
+  <circle cx="512" cy="530" r="255" fill="#FFF3DD"/>
+
+  <!-- segments: the wheel -->
+  <g transform="translate(0 18)" fill="url(#pulp)" stroke="#FFF3DD" stroke-width="16" stroke-linejoin="round">
+    <use xlink:href="#seg" transform="rotate(0 512 512)"/>
+    <use xlink:href="#seg" transform="rotate(45 512 512)"/>
+    <use xlink:href="#seg" transform="rotate(90 512 512)"/>
+    <use xlink:href="#seg" transform="rotate(135 512 512)"/>
+    <use xlink:href="#seg" transform="rotate(180 512 512)"/>
+    <use xlink:href="#seg" transform="rotate(225 512 512)"/>
+    <use xlink:href="#seg" transform="rotate(270 512 512)"/>
+    <use xlink:href="#seg" transform="rotate(315 512 512)"/>
+  </g>
+  <!-- highlighted segment (the chosen option) -->
+  <g transform="translate(0 18)">
+    <use xlink:href="#seg" transform="rotate(45 512 512) translate(7 -17)" fill="#FF7A00" stroke="#FFF3DD" stroke-width="16" stroke-linejoin="round"/>
+  </g>
+  <!-- centre -->
+  <circle cx="512" cy="530" r="34" fill="#FFF3DD"/>
+
+  <!-- stem and leaf -->
+  <path d="M512 248 C510 222 516 200 530 184" stroke="#6B4B2A" stroke-width="16" stroke-linecap="round" fill="none"/>
+  <path d="M528 196 C580 132 680 128 740 160 C700 226 610 252 528 196 Z" fill="url(#leaf)"/>
+  <path d="M540 194 C600 178 660 168 718 164" stroke="#2A7A3C" stroke-width="6" stroke-linecap="round" fill="none" opacity="0.6"/>
+
+  <!-- gloss on peel -->
+  <path d="M300 420 A230 230 0 0 1 420 300" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="22" stroke-linecap="round" fill="none"/>
+</svg>
