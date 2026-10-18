@@ -1,5 +1,6 @@
 import AppKit
 import PDFKit
+import Quartz
 
 // MARK: - PDF
 
@@ -117,6 +118,23 @@ enum PDFTools {
     }
 
     /// Re-renders each page as a JPEG at lower resolution: big savings on scanned PDFs.
+    /// Lossless-ish compression through macOS's own "Reduce File Size" Quartz filter (keeps text selectable).
+    static func compressQuartz(_ url: URL) throws -> URL {
+        let doc = try open(url)
+        let filterURL = URL(fileURLWithPath: "/System/Library/Filters/Reduce File Size.qfilter")
+        guard let filter = QuartzFilter(url: filterURL) else { throw ClementineError("Filtro di compressione di macOS non disponibile") }
+        let out = Output.url(for: url, ext: "pdf", suffix: "-compresso")
+        let ok = doc.write(to: out, withOptions: [PDFDocumentWriteOption(rawValue: "QuartzFilter"): filter])
+        guard ok else { throw ClementineError("Compressione non riuscita") }
+        let before = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        let after = (try? out.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        if after >= before, before > 0 {
+            try? FileManager.default.removeItem(at: out)
+            throw ClementineError("Il PDF è già ottimizzato: prova la modalità \"scansioni\" con DPI più bassi")
+        }
+        return out
+    }
+
     static func compress(_ url: URL, dpi: Double, quality: Double) throws -> URL {
         let doc = try open(url)
         let result = PDFDocument()
@@ -177,6 +195,10 @@ enum DocTools {
         if ext == "pdf" {
             return NSAttributedString(string: try PDFTools.open(url).string ?? "")
         }
+        if ext == "epub" { return try EpubTools.read(url) }
+        if ["pages", "key", "numbers", "pptx", "xlsx"].contains(ext) {
+            throw ClementineError("Usa la conversione dedicata per questo formato")
+        }
         return try NSAttributedString(url: url, options: [:], documentAttributes: nil)
     }
 
@@ -191,6 +213,8 @@ enum DocTools {
             try markdown(from: text).write(to: out, atomically: true, encoding: .utf8)
         case "pdf":
             try await MainActor.run { try pdf(from: text, to: out) }
+        case "epub":
+            try EpubTools.write(text, title: url.deletingPathExtension().lastPathComponent, to: out)
         default:
             let type: NSAttributedString.DocumentType
             switch ext {

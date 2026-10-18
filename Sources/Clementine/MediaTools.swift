@@ -8,10 +8,10 @@ enum MediaTools {
     static func encodeArgs(for ext: String, hasVideo: Bool) -> [String] {
         switch ext {
         case "mp4", "m4v", "mov":
-            return ["-c:v", "libx264", "-crf", "23", "-preset", "medium", "-pix_fmt", "yuv420p",
+            return ["-c:v", "libx264", "-crf", "\(Prefs.videoCRF)", "-preset", "medium", "-pix_fmt", "yuv420p",
                     "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart"]
         case "mkv":
-            return ["-c:v", "libx264", "-crf", "22", "-preset", "medium", "-c:a", "aac", "-b:a", "192k", "-c:s", "copy"]
+            return ["-c:v", "libx264", "-crf", "\(Prefs.videoCRF - 1)", "-preset", "medium", "-c:a", "aac", "-b:a", "192k", "-c:s", "copy"]
         case "webm":
             return ["-c:v", "libvpx-vp9", "-crf", "32", "-b:v", "0", "-row-mt", "1", "-c:a", "libopus", "-b:a", "128k"]
         case "avi":
@@ -294,6 +294,146 @@ enum MediaTools {
         var args = ["-i", url.path, "-map", "0", "-c", "copy"]
         if !title.isEmpty { args += ["-metadata", "title=\(title)"] }
         if !artist.isEmpty { args += ["-metadata", "artist=\(artist)"] }
+        args.append(out.path)
+        try await FFmpeg.run(args, job: job)
+        return out
+    }
+}
+
+// MARK: - Extra tools (visualizer, silence, channels, frames, redaction)
+
+extension MediaTools {
+    /// Turns audio into a video with an animated waveform over a color or image background.
+    static func visualizer(_ url: URL, style: String, color: String, background: URL?, portrait: Bool, job: Job?) async throws -> URL {
+        let out = Output.url(for: url, ext: "mp4", suffix: "-visualizzazione")
+        let (w, h) = portrait ? (1080, 1920) : (1920, 1080)
+        let hex = color.hasPrefix("#") ? String(color.dropFirst()) : color
+        let wave: String
+        switch style {
+        case "barre": wave = "showfreqs=s=\(w)x\(h / 2):mode=bar:cmode=combined:colors=0x\(hex)"
+        case "spettro": wave = "showspectrum=s=\(w)x\(h / 2):mode=combined:color=intensity:slide=scroll"
+        default: wave = "showwaves=s=\(w)x\(h / 2):mode=cline:rate=30:colors=0x\(hex)"
+        }
+        var args: [String]
+        let filter: String
+        if let bg = background {
+            args = ["-loop", "1", "-i", bg.path, "-i", url.path]
+            filter = "[0:v]scale=\(w):\(h):force_original_aspect_ratio=increase,crop=\(w):\(h)[bg];[1:a]\(wave),format=rgba,colorkey=0x000000:0.1:0.0[w];[bg][w]overlay=0:(H-h)/2:shortest=1,format=yuv420p[v]"
+            args += ["-filter_complex", filter, "-map", "[v]", "-map", "1:a"]
+        } else {
+            args = ["-f", "lavfi", "-i", "color=c=0x111111:s=\(w)x\(h):r=30", "-i", url.path]
+            filter = "[1:a]\(wave),format=rgba,colorkey=0x000000:0.1:0.0[w];[0:v][w]overlay=0:(H-h)/2:shortest=1,format=yuv420p[v]"
+            args += ["-filter_complex", filter, "-map", "[v]", "-map", "1:a"]
+        }
+        args += ["-c:v", "libx264", "-preset", "medium", "-crf", "20", "-c:a", "aac", "-b:a", "192k", "-shortest", out.path]
+        try await FFmpeg.run(args, duration: FFmpeg.duration(of: url), job: job)
+        return out
+    }
+
+    /// Removes silence at the start and end (threshold in dB, e.g. -45).
+    static func trimSilence(_ url: URL, thresholdDB: Double, job: Job?) async throws -> URL {
+        let ext = url.pathExtension.lowercased()
+        let out = Output.url(for: url, ext: ext, suffix: "-senza-silenzi")
+        let t = "\(Int(thresholdDB))dB"
+        let filter = "silenceremove=start_periods=1:start_threshold=\(t):start_silence=0.1," +
+            "areverse,silenceremove=start_periods=1:start_threshold=\(t):start_silence=0.1,areverse"
+        var args = ["-i", url.path, "-af", filter]
+        if FFmpeg.hasVideoStream(url) { args += ["-vn"] }
+        args += audioCodec(for: ext) + [out.path]
+        try await FFmpeg.run(args, duration: FFmpeg.duration(of: url), job: job)
+        return out
+    }
+
+    /// Mono/stereo output with independent left/right volume (percent).
+    static func channels(_ url: URL, layout: String, left: Double, right: Double, job: Job?) async throws -> URL {
+        let l = max(0, left) / 100, r = max(0, right) / 100
+        let filter = layout == "mono"
+            ? "pan=mono|c0=\(l * 0.5)*c0+\(r * 0.5)*c1"
+            : "aformat=channel_layouts=stereo,pan=stereo|c0=\(l)*c0|c1=\(r)*c1"
+        return try await audioFilter(url, filter: filter, suffix: layout == "mono" ? "-mono" : "-canali", job: job)
+    }
+
+    /// Saves frames every `interval` seconds (or the listed timestamps) into a folder.
+    static func frames(_ url: URL, interval: Double, times: [Double], job: Job?) async throws -> [URL] {
+        let folder = Output.folder(for: url, suffix: "-fotogrammi")
+        let base = url.deletingPathExtension().lastPathComponent
+        if !times.isEmpty {
+            for (i, t) in times.enumerated() {
+                job?.report(Double(i) / Double(times.count))
+                let dest = folder.appendingPathComponent(String(format: "%@ - %03d - %.2fs.png", base, i + 1, t))
+                try await FFmpeg.run(["-ss", String(t), "-i", url.path, "-frames:v", "1", dest.path])
+            }
+        } else {
+            let fps = 1 / max(0.04, interval)
+            try await FFmpeg.run(["-i", url.path, "-vf", "fps=\(fps)", folder.appendingPathComponent(base + " - %04d.png").path],
+                                 duration: FFmpeg.duration(of: url), job: job)
+        }
+        return [folder]
+    }
+
+    /// Splits at the given timestamps into separate clips (re-encoded for exact cuts).
+    static func split(_ url: URL, at points: [Double], job: Job?) async throws -> [URL] {
+        let sorted = points.filter { $0 > 0 }.sorted()
+        guard !sorted.isEmpty else { throw ClementineError("Indica almeno un punto di taglio") }
+        let folder = Output.folder(for: url, suffix: "-parti")
+        let ext = url.pathExtension.lowercased()
+        let base = url.deletingPathExtension().lastPathComponent
+        let bounds = [0] + sorted + [Double.infinity]
+        let hasVideo = FFmpeg.hasVideoStream(url)
+        for i in 0..<(bounds.count - 1) {
+            job?.report(Double(i) / Double(bounds.count - 1), "Parte \(i + 1) di \(bounds.count - 1)")
+            var args = ["-ss", String(bounds[i]), "-i", url.path]
+            if bounds[i + 1].isFinite { args += ["-t", String(bounds[i + 1] - bounds[i])] }
+            args += encodeArgs(for: ext, hasVideo: hasVideo)
+            args.append(folder.appendingPathComponent(String(format: "%@-%02d.%@", base, i + 1, ext)).path)
+            try await FFmpeg.run(args)
+        }
+        return [folder]
+    }
+
+    /// Hides rectangles (normalized 0...1, origin bottom-left) for the whole video or a time range.
+    static func redact(_ url: URL, rects: [(CGRect, Bool)], start: Double, end: Double, job: Job?) async throws -> URL {
+        let out = Output.url(for: url, ext: "mp4", suffix: "-oscurato")
+        let enable = end > start ? ":enable='between(t,\(start),\(end))'" : ""
+        var chain = "[0:v]null[v0]"
+        for (i, item) in rects.enumerated() {
+            let (r, solid) = item
+            // ffmpeg uses a top-left origin.
+            let x = "iw*\(r.minX)", y = "ih*\(1 - r.maxY)", w = "iw*\(r.width)", h = "ih*\(r.height)"
+            if solid {
+                chain += ";[v\(i)]drawbox=x=\(x):y=\(y):w=\(w):h=\(h):color=black:t=fill\(enable)[v\(i + 1)]"
+            } else {
+                chain += ";[v\(i)]split[a\(i)][b\(i)];[b\(i)]crop=\(w):\(h):\(x):\(y),boxblur=20:4[blur\(i)];" +
+                    "[a\(i)][blur\(i)]overlay=\(x):\(y)\(enable)[v\(i + 1)]"
+            }
+        }
+        let args = ["-i", url.path, "-filter_complex", chain, "-map", "[v\(rects.count)]", "-map", "0:a?",
+                    "-c:v", "libx264", "-crf", "20", "-preset", "medium", "-pix_fmt", "yuv420p", "-c:a", "copy", out.path]
+        try await FFmpeg.run(args, duration: FFmpeg.duration(of: url), job: job)
+        return out
+    }
+
+    /// Crop with a rectangle drawn in the editor (normalized, origin bottom-left).
+    static func crop(_ url: URL, rect r: CGRect, job: Job?) async throws -> URL {
+        let out = Output.url(for: url, ext: "mp4", suffix: "-ritagliato")
+        let filter = "crop=trunc(iw*\(r.width)/2)*2:trunc(ih*\(r.height)/2)*2:iw*\(r.minX):ih*\(1 - r.maxY)"
+        try await FFmpeg.run(["-i", url.path, "-vf", filter] + encodeArgs(for: "mp4", hasVideo: true) + [out.path],
+                             duration: FFmpeg.duration(of: url), job: job)
+        return out
+    }
+
+    /// First frame (at `seconds`) as an image, for the editor.
+    static func frameImage(_ url: URL, at seconds: Double) async throws -> CGImage {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".png")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        try await FFmpeg.run(["-ss", String(seconds), "-i", url.path, "-frames:v", "1", tmp.path])
+        return try ImageTools.load(tmp)
+    }
+
+    static func setTags(_ url: URL, tags: [String: String], job: Job?) async throws -> URL {
+        let out = Output.url(for: url, ext: url.pathExtension.lowercased(), suffix: "-modificato")
+        var args = ["-i", url.path, "-map", "0", "-c", "copy"]
+        for (k, v) in tags.sorted(by: { $0.key < $1.key }) where !v.isEmpty { args += ["-metadata", "\(k)=\(v)"] }
         args.append(out.path)
         try await FFmpeg.run(args, job: job)
         return out

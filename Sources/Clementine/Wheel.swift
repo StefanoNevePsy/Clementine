@@ -126,7 +126,13 @@ final class WheelView: NSView {
     private var mode: WheelMode = .convert
     private var title = ""
     private var subtitle = ""
-    private var highlighted: Int? { didSet { if oldValue != highlighted { needsDisplay = true } } }
+    private var highlighted: Int? {
+        didSet {
+            guard oldValue != highlighted else { return }
+            needsDisplay = true
+            if highlighted != nil { Prefs.tick() }
+        }
+    }
     var clickMode = false
 
     private let inner: CGFloat = 92

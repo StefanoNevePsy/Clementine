@@ -27,6 +27,8 @@ enum Catalog {
         case (.pdf, .convert): return pdfConvert(many: files.count > 1)
         case (.pdf, .tools): return pdfTools(many: files.count > 1)
         case (.document, _): return mode == .convert ? docConvert(excluding: sourceExt) : docTools()
+        case (.spreadsheet, _): return mode == .convert ? sheetConvert(excluding: sourceExt) : docTools()
+        case (.presentation, _): return presentationOps(excluding: sourceExt)
         case (.subtitle, _): return subtitleOps(excluding: sourceExt)
         case (.archive, _): return archiveOps()
         default: return genericOps()
@@ -63,6 +65,57 @@ enum Catalog {
         }
     }
 
+    /// Opens the photo editor on the selected images.
+    private static func editor(_ title: String, _ symbol: String, _ tab: EditorTab) -> Operation {
+        Operation(title: title, symbol: symbol, instant: true) { files, _, _ in
+            await MainActor.run { ImageEditorWindow.open(files, tab: tab) }
+            return []
+        }
+    }
+
+    /// Opens the editor on a video frame; the drawn crop/rectangles are then applied to the whole video.
+    private static func videoEditor(_ title: String, _ symbol: String, _ tab: EditorTab) -> Operation {
+        Operation(title: title, symbol: symbol, instant: true) { files, _, _ in
+            let url = files[0]
+            let duration = FFmpeg.duration(of: url) ?? 0
+            let frame = try await MediaTools.frameImage(url, at: min(1, duration / 2))
+            await MainActor.run {
+                let model = EditorModel(urls: [url], image: frame, tabs: [tab], initial: tab)
+                model.onSave = { m in
+                    let size = m.fullSize
+                    func norm(_ r: CGRect) -> CGRect {
+                        CGRect(x: r.minX / size.width, y: r.minY / size.height, width: r.width / size.width, height: r.height / size.height)
+                    }
+                    if tab == .crop {
+                        guard let c = m.crop else { return }
+                        JobCenter.shared.run(title: "Ritaglia · \(url.lastPathComponent)") { job in
+                            [try await MediaTools.crop(url, rect: norm(c), job: job)]
+                        }
+                    } else {
+                        let rects = m.marks.filter { $0.kind == .solid || $0.kind == .blur }.map { (norm($0.rect), $0.kind == .solid) }
+                        guard !rects.isEmpty else { return }
+                        guard let v = ParamPrompt.ask(title: "Quando oscurare?", params: [
+                            Param(key: "start", label: "Da (secondi o mm:ss) — lascia 0 e 0 per tutto il video", defaultValue: "0"),
+                            Param(key: "end", label: "A (secondi o mm:ss)", defaultValue: "0")]) else { return }
+                        JobCenter.shared.run(title: "Oscura · \(url.lastPathComponent)") { job in
+                            [try await MediaTools.redact(url, rects: rects, start: v.seconds("start"), end: v.seconds("end"), job: job)]
+                        }
+                    }
+                }
+                ImageEditorWindow.show(model: model, title: "\(title) · \(url.lastPathComponent)")
+            }
+            return []
+        }
+    }
+
+    static func timeList(_ raw: String?) -> [Double] {
+        (raw ?? "").split(separator: ",").compactMap { part -> Double? in
+            let t = part.trimmingCharacters(in: .whitespaces)
+            guard !t.isEmpty else { return nil }
+            return ["v": t].seconds("v")
+        }
+    }
+
     private static func info(_ title: String, _ symbol: String, _ f: @escaping (URL) async throws -> String) -> Operation {
         Operation(title: title, symbol: symbol, instant: true) { files, _, _ in
             var parts: [String] = []
@@ -90,6 +143,11 @@ enum Catalog {
 
     static func imageTools(many: Bool) -> [Operation] {
         var ops: [Operation] = [
+            editor("Ritaglia", "crop", .crop),
+            editor("Regola", "slider.horizontal.3", .adjust),
+            editor("Annota", "pencil.tip.crop.circle", .annotate),
+            editor("Oscura", "eye.slash.circle", .redact),
+            editor("Cornice", "photo.artframe", .frame),
             each("Comprimi", "arrow.down.right.and.arrow.up.left",
                  params: [Param(key: "kb", label: "Dimensione massima (KB) — lascia vuoto per usare la %", defaultValue: ""),
                           Param(key: "pct", label: "Oppure % della dimensione originale", defaultValue: "50")]) { url, v, _ in
@@ -99,15 +157,6 @@ enum Catalog {
                  params: [Param(key: "max", label: "Lato lungo massimo (px) — vuoto per usare la %", defaultValue: "1920"),
                           Param(key: "pct", label: "Oppure scala in %", defaultValue: "")]) { url, v, _ in
                 try await ImageTools.resize(url, percent: v.double("pct"), maxSide: v.double("max"))
-            },
-            each("Ruota 90°", "rotate.right") { url, _, _ in
-                try await ImageTools.transform(url, suffix: "-ruotata") { $0.oriented(.right) }
-            },
-            each("Rifletti", "arrow.left.and.right.righttriangle.left.righttriangle.right") { url, _, _ in
-                try await ImageTools.transform(url, suffix: "-riflessa") { $0.oriented(.upMirrored) }
-            },
-            each("Bianco e nero", "circle.lefthalf.filled") { url, _, _ in
-                try await ImageTools.transform(url, suffix: "-bn") { $0.applyingFilter("CIPhotoEffectNoir") }
             },
             each("Migliora auto", "wand.and.stars") { url, _, _ in
                 try await ImageTools.transform(url, suffix: "-migliorata") { img in
@@ -120,6 +169,16 @@ enum Catalog {
             each("Rimuovi sfondo", "person.crop.rectangle") { url, _, _ in try await ImageTools.removeBackground(url) },
             each("Togli metadati", "eye.slash") { url, _, _ in try await ImageTools.stripMetadata(url) },
             info("Metadati", "info.circle") { ImageTools.metadataText($0) },
+            each("Modifica metadati", "tag",
+                 params: [Param(key: "title", label: "Titolo", defaultValue: ""),
+                          Param(key: "author", label: "Autore", defaultValue: ""),
+                          Param(key: "description", label: "Descrizione", defaultValue: ""),
+                          Param(key: "copyright", label: "Copyright", defaultValue: ""),
+                          Param(key: "keywords", label: "Parole chiave", defaultValue: ""),
+                          Param(key: "date", label: "Data (AAAA-MM-GG)", defaultValue: ""),
+                          Param(key: "gps", label: "Rimuovere la posizione GPS? (sì/no)", defaultValue: "sì")]) { url, v, _ in
+                try ImageTools.editMetadata(url, fields: v, removeGPS: (v["gps"] ?? "").lowercased().hasPrefix("s"))
+            },
             info("Leggi QR", "qrcode.viewfinder") { try ImageTools.readQR($0) },
             info("Testo (OCR)", "text.viewfinder") { try ImageTools.ocr($0) },
         ]
@@ -160,10 +219,8 @@ enum Catalog {
                           Param(key: "end", label: "Fine (secondi o mm:ss)", defaultValue: "0:30")]) { url, v, job in
                 try await MediaTools.trim(url, start: v.seconds("start"), end: v.seconds("end"), job: job)
             },
-            each("Ritaglia", "crop",
-                 params: [Param(key: "r", label: "Proporzioni (es. 16:9, 1:1, 9:16)", defaultValue: "9:16")]) { url, v, job in
-                try await MediaTools.crop(url, ratio: v["r"] ?? "", job: job)
-            },
+            videoEditor("Ritaglia", "crop", .crop),
+            videoEditor("Oscura", "eye.slash.circle", .redact),
             each("Velocità", "speedometer",
                  params: [Param(key: "f", label: "Fattore (0.5 = rallenta, 2 = doppia)", defaultValue: "1.5")]) { url, v, job in
                 try await MediaTools.speed(url, factor: v.double("f", 1), job: job)
@@ -174,9 +231,17 @@ enum Catalog {
             each("Fotogramma", "camera", params: [Param(key: "t", label: "Istante (secondi o mm:ss)", defaultValue: "0")]) { url, v, _ in
                 try await MediaTools.snapshot(url, at: v.seconds("t"))
             },
+            eachMany("Fotogrammi", "photo.stack",
+                     params: [Param(key: "times", label: "Istanti separati da virgola (es. 0:05, 1:20) — vuoto per usare l'intervallo", defaultValue: ""),
+                              Param(key: "every", label: "Oppure uno ogni N secondi", defaultValue: "5")]) { url, v, job in
+                try await MediaTools.frames(url, interval: v.double("every", 5), times: timeList(v["times"]), job: job)
+            },
             eachMany("Dividi", "square.split.2x1",
-                     params: [Param(key: "s", label: "Durata di ogni parte (secondi o mm:ss)", defaultValue: "60")]) { url, v, job in
-                try await MediaTools.split(url, segmentSeconds: v.seconds("s"), job: job)
+                     params: [Param(key: "points", label: "Punti di taglio separati da virgola (es. 0:30, 1:45)", defaultValue: ""),
+                              Param(key: "s", label: "Oppure parti da N secondi", defaultValue: "60")]) { url, v, job in
+                let points = timeList(v["points"])
+                if !points.isEmpty { return try await MediaTools.split(url, at: points, job: job) }
+                return try await MediaTools.split(url, segmentSeconds: v.seconds("s"), job: job)
             },
             each("Togli metadati", "eye.slash") { url, _, job in try await MediaTools.stripMetadata(url, job: job) },
             info("Metadati", "info.circle") { await MediaTools.metadataText($0) },
@@ -206,11 +271,26 @@ enum Catalog {
                           Param(key: "end", label: "Fine censura", defaultValue: "1")]) { url, v, job in
                 try await MediaTools.bleep(url, start: v.seconds("start"), end: v.seconds("end"), job: job)
             },
-            each("Mono", "speaker.wave.1") { url, _, job in
-                try await MediaTools.audioFilter(url, filter: "pan=mono|c0=0.5*c0+0.5*c1", suffix: "-mono", job: job)
+            each("Canali", "speaker.wave.2",
+                 params: [Param(key: "layout", label: "Uscita: mono o stereo", defaultValue: "stereo"),
+                          Param(key: "l", label: "Volume sinistro (%)", defaultValue: "100"),
+                          Param(key: "r", label: "Volume destro (%)", defaultValue: "100")]) { url, v, job in
+                try await MediaTools.channels(url, layout: (v["layout"] ?? "").lowercased().hasPrefix("m") ? "mono" : "stereo",
+                                              left: v.double("l", 100), right: v.double("r", 100), job: job)
             },
-            each("Stereo", "speaker.wave.2") { url, _, job in
-                try await MediaTools.audioFilter(url, filter: "pan=stereo|c0=c0|c1=c0", suffix: "-stereo", job: job)
+            each("Togli silenzi", "waveform.path.badge.minus",
+                 params: [Param(key: "db", label: "Soglia del silenzio (dB, es. -45)", defaultValue: "-45")]) { url, v, job in
+                try await MediaTools.trimSilence(url, thresholdDB: v.double("db", -45), job: job)
+            },
+            each("Visualizza", "waveform.circle",
+                 params: [Param(key: "style", label: "Stile: onda, barre o spettro", defaultValue: "onda"),
+                          Param(key: "color", label: "Colore (esadecimale)", defaultValue: "#FF8A1F"),
+                          Param(key: "format", label: "Formato: orizzontale o verticale", defaultValue: "orizzontale"),
+                          Param(key: "bg", label: "Immagine di sfondo (percorso, facoltativo — trascinala qui)", defaultValue: "")]) { url, v, job in
+                let bgPath = (v["bg"] ?? "").trimmingCharacters(in: CharacterSet(charactersIn: " '\""))
+                return try await MediaTools.visualizer(url, style: (v["style"] ?? "onda").lowercased(), color: v["color"] ?? "FF8A1F",
+                                                       background: bgPath.isEmpty ? nil : URL(fileURLWithPath: bgPath),
+                                                       portrait: (v["format"] ?? "").lowercased().hasPrefix("v"), job: job)
             },
             each("Velocità", "speedometer",
                  params: [Param(key: "f", label: "Fattore (0.5 = rallenta, 2 = doppia)", defaultValue: "1.25")]) { url, v, job in
@@ -219,10 +299,14 @@ enum Catalog {
             each("Riduci rumore", "waveform.badge.minus") { url, _, job in
                 try await MediaTools.audioFilter(url, filter: "afftdn=nf=-25", suffix: "-pulito", job: job)
             },
-            each("Titolo/Artista", "pencil",
+            each("Modifica tag", "tag",
                  params: [Param(key: "title", label: "Titolo", defaultValue: ""),
-                          Param(key: "artist", label: "Artista", defaultValue: "")]) { url, v, job in
-                try await MediaTools.setTitle(url, title: v["title"] ?? "", artist: v["artist"] ?? "", job: job)
+                          Param(key: "artist", label: "Artista", defaultValue: ""),
+                          Param(key: "album", label: "Album", defaultValue: ""),
+                          Param(key: "date", label: "Anno", defaultValue: ""),
+                          Param(key: "genre", label: "Genere", defaultValue: ""),
+                          Param(key: "comment", label: "Commento", defaultValue: "")]) { url, v, job in
+                try await MediaTools.setTags(url, tags: v, job: job)
             },
             each("Togli metadati", "eye.slash") { url, _, job in try await MediaTools.stripMetadata(url, job: job) },
             info("Metadati", "info.circle") { await MediaTools.metadataText($0) },
@@ -240,6 +324,7 @@ enum Catalog {
             each("TXT", "doc.plaintext") { url, _, _ in try PDFTools.text(url) },
             each("DOCX", "doc.richtext") { url, _, _ in try await DocTools.convert(url, to: "docx") },
             each("RTF", "doc.richtext") { url, _, _ in try await DocTools.convert(url, to: "rtf") },
+            each("EPUB", "book") { url, _, _ in try await DocTools.convert(url, to: "epub") },
         ]
         if many { ops.insert(combined("Unisci", "doc.on.doc") { urls, _, _ in try PDFTools.merge(urls) }, at: 0) }
         return ops
@@ -247,7 +332,12 @@ enum Catalog {
 
     static func pdfTools(many: Bool) -> [Operation] {
         var ops: [Operation] = [
-            each("Comprimi", "arrow.down.right.and.arrow.up.left",
+            Operation(title: "Organizza", symbol: "square.grid.3x3", instant: true) { files, _, _ in
+                await MainActor.run { PDFOrganizerWindow.show(files) }
+                return []
+            },
+            each("Comprimi", "arrow.down.right.and.arrow.up.left") { url, _, _ in try PDFTools.compressQuartz(url) },
+            each("Comprimi scansioni", "doc.viewfinder",
                  params: [Param(key: "dpi", label: "Risoluzione (DPI): 72 piccolo, 110 medio, 150 buono", defaultValue: "110"),
                           Param(key: "q", label: "Qualità JPEG (0-100)", defaultValue: "60")]) { url, v, _ in
                 try PDFTools.compress(url, dpi: v.double("dpi", 110), quality: v.double("q", 60) / 100)
@@ -272,9 +362,42 @@ enum Catalog {
     // MARK: Documents, subtitles, archives
 
     static func docConvert(excluding ext: String) -> [Operation] {
-        ["pdf", "docx", "txt", "rtf", "html", "md", "odt"].filter { $0 != ext }.map { f in
-            each(f.uppercased(), "doc.text") { url, _, _ in try await DocTools.convert(url, to: f) }
+        if ext == "pages" {
+            var ops = ["pdf", "docx", "epub", "txt", "rtf"].map { f in
+                each(f.uppercased(), "doc.text") { url, _, _ in try await OfficeTools.convert(url, to: f) }
+            }
+            ops.append(each("Anteprima", "eye") { url, _, _ in try OfficeTools.iWorkPreview(url) })
+            return ops
         }
+        var ops = ["pdf", "docx", "epub", "txt", "rtf", "html", "md", "odt"].filter { $0 != ext }.map { f in
+            each(f.uppercased(), f == "epub" ? "book" : "doc.text") { url, _, _ in try await DocTools.convert(url, to: f) }
+        }
+        if OfficeTools.appInstalled("com.apple.iWork.Pages"), ["docx", "doc", "rtf", "txt", "odt"].contains(ext) {
+            ops.append(each("PAGES", "doc.richtext") { url, _, _ in try await OfficeTools.convert(url, to: "pages") })
+        }
+        return ops
+    }
+
+    static func sheetConvert(excluding ext: String) -> [Operation] {
+        var formats = ["xlsx", "csv", "pdf", "html", "json"]
+        if OfficeTools.appInstalled("com.apple.iWork.Numbers") { formats.append("numbers") }
+        var ops = formats.filter { $0 != ext && !($0 == "csv" && ext == "tsv") }.map { f in
+            each(f.uppercased(), "tablecells") { url, _, _ in try await SheetTools.convert(url, to: f) }
+        }
+        if ext == "numbers" { ops.append(each("Anteprima", "eye") { url, _, _ in try OfficeTools.iWorkPreview(url) }) }
+        return ops
+    }
+
+    static func presentationOps(excluding ext: String) -> [Operation] {
+        var ops = ["pdf", "pptx", "key"].filter { $0 != ext }.map { f in
+            each(f.uppercased(), "play.rectangle") { url, _, _ in try await OfficeTools.convert(url, to: f) }
+        }
+        if ext == "key" {
+            ops.append(each("Video", "film") { url, _, _ in try await OfficeTools.convert(url, to: "m4v") })
+            ops.append(each("Anteprima", "eye") { url, _, _ in try OfficeTools.iWorkPreview(url) })
+        }
+        if ext == "pptx" { ops.append(each("TXT", "doc.plaintext") { url, _, _ in try OfficeTools.pptxText(url) }) }
+        return ops
     }
 
     static func docTools() -> [Operation] {

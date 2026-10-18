@@ -50,7 +50,7 @@ enum ImageTools {
         "jpg": .jpeg, "png": .png, "heic": .heic, "tiff": .tiff, "bmp": .bmp, "gif": .gif,
     ]
 
-    static func data(_ img: CGImage, ext: String, quality: Double = 0.85) -> Data? {
+    static func data(_ img: CGImage, ext: String, quality: Double = Prefs.imageQuality) -> Data? {
         guard let type = nativeTypes[ext] else { return nil }
         let out = NSMutableData()
         guard let dest = CGImageDestinationCreateWithData(out, type.identifier as CFString, 1, nil) else { return nil }
@@ -73,7 +73,7 @@ enum ImageTools {
         return ctx.makeImage() ?? img
     }
 
-    static func write(_ img: CGImage, to url: URL, quality: Double = 0.85) async throws {
+    static func write(_ img: CGImage, to url: URL, quality: Double = Prefs.imageQuality) async throws {
         let ext = url.pathExtension.lowercased()
         if ext == "pdf" {
             try pdf(from: [img], to: url)
@@ -264,6 +264,39 @@ enum ImageTools {
         guard let result = ctx.makeImage() else { throw ClementineError("Elaborazione fallita") }
         let out = Output.url(for: urls[0], ext: "jpg", suffix: "-collage")
         try await write(result, to: out, quality: 0.9)
+        return out
+    }
+}
+
+// MARK: - Metadata editing (lossless, through ImageIO)
+
+extension ImageTools {
+    /// Writes common descriptive fields without re-encoding pixels. Empty values are left unchanged.
+    static func editMetadata(_ url: URL, fields: [String: String], removeGPS: Bool) throws -> URL {
+        guard let src = CGImageSourceCreateWithURL(url as CFURL, nil), let type = CGImageSourceGetType(src) else {
+            throw ClementineError("Impossibile leggere l'immagine")
+        }
+        let out = Output.url(for: url, ext: url.pathExtension.lowercased(), suffix: "-metadati")
+        guard let dest = CGImageDestinationCreateWithURL(out as CFURL, type, 1, nil) else { throw ClementineError("Formato non scrivibile") }
+        let meta = CGImageMetadataCreateMutable()
+        func set(_ ns: CFString, _ prefix: CFString, _ key: String, _ value: String?) {
+            guard let value, !value.isEmpty else { return }
+            CGImageMetadataSetValueWithPath(meta, nil, "\(prefix):\(key)" as CFString, value as CFString)
+        }
+        set(kCGImageMetadataNamespaceDublinCore, kCGImageMetadataPrefixDublinCore, "title", fields["title"])
+        set(kCGImageMetadataNamespaceDublinCore, kCGImageMetadataPrefixDublinCore, "creator", fields["author"])
+        set(kCGImageMetadataNamespaceDublinCore, kCGImageMetadataPrefixDublinCore, "description", fields["description"])
+        set(kCGImageMetadataNamespaceDublinCore, kCGImageMetadataPrefixDublinCore, "rights", fields["copyright"])
+        set(kCGImageMetadataNamespaceDublinCore, kCGImageMetadataPrefixDublinCore, "subject", fields["keywords"])
+        if let date = fields["date"], !date.isEmpty {
+            CGImageMetadataSetValueWithPath(meta, nil, "xmp:CreateDate" as CFString, date as CFString)
+        }
+        var options: [CFString: Any] = [kCGImageDestinationMetadata: meta, kCGImageDestinationMergeMetadata: true]
+        if removeGPS { options[kCGImageMetadataShouldExcludeGPS] = true }
+        var error: Unmanaged<CFError>?
+        guard CGImageDestinationCopyImageSource(dest, src, options as CFDictionary, &error) else {
+            throw ClementineError("Questo formato non permette di modificare i metadati senza ricodifica")
+        }
         return out
     }
 }

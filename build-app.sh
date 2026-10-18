@@ -51,6 +51,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
+  <key>NSAppleEventsUsageDescription</key><string>Clementine usa Pages, Numbers e Keynote per convertire i documenti iWork e Office.</string>
   <key>CFBundleDocumentTypes</key>
   <array>
     <dict>

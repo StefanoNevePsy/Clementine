@@ -14,6 +14,9 @@ struct ClementineApp: App {
                 .frame(minWidth: 460, minHeight: 360)
         }
         .defaultSize(width: 520, height: 420)
+        Settings {
+            SettingsView()
+        }
     }
 }
 
@@ -26,6 +29,14 @@ struct MenuContent: View {
             NSApp.activate(ignoringOtherApps: true)
         }
         Button("Scegli file da convertire…") { AppDelegate.shared?.pickFiles() }
+        if #available(macOS 14.0, *) {
+            SettingsLink { Text("Impostazioni…") }.keyboardShortcut(",")
+        } else {
+            Button("Impostazioni…") {
+                NSApp.activate(ignoringOtherApps: true)
+                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+            }.keyboardShortcut(",")
+        }
         Divider()
         Text("Trascina un file tenendo ⇧ per aprire la ruota")
         Text("⇧⌥ strumenti · ⇧⌃ azioni")

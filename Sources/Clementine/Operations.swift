@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 // MARK: - File kinds
 
 enum FileKind: String {
-    case image, video, audio, pdf, document, subtitle, archive, folder, other
+    case image, video, audio, pdf, document, spreadsheet, presentation, subtitle, archive, folder, other
 
     static func of(_ url: URL) -> FileKind {
         var isDir: ObjCBool = false
@@ -15,6 +15,8 @@ enum FileKind: String {
         let ext = url.pathExtension.lowercased()
         switch ext {
         case "srt", "vtt": return .subtitle
+        case "csv", "tsv", "xlsx", "xls", "numbers", "ods": return .spreadsheet
+        case "pptx", "ppt", "key", "odp": return .presentation
         case "pdf": return .pdf
         case "zip", "tar", "gz", "tgz", "rar", "7z", "bz2", "xz": return .archive
         case "svg", "webp", "avif", "heic", "heif": return .image
@@ -38,6 +40,8 @@ enum FileKind: String {
         case .audio: return "Audio"
         case .pdf: return "PDF"
         case .document: return "Documento"
+        case .spreadsheet: return "Foglio di calcolo"
+        case .presentation: return "Presentazione"
         case .subtitle: return "Sottotitoli"
         case .archive: return "Archivio"
         case .folder: return "Cartella"
