@@ -4,6 +4,9 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: macos-14
@@ -20,6 +23,8 @@ jobs:
           Resources/ffmpeg -version | head -1
 
       - name: Build
+        env:
+          VERSION: 1.0.${{ github.run_number }}
         run: |
           chmod +x build-app.sh
           ./build-app.sh
@@ -28,3 +33,18 @@ jobs:
         with:
           name: Clementine
           path: dist/Clementine.zip
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Clementine 1.0.${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          body: |
+            Scarica **Clementine.zip**, decomprimi e trascina Clementine.app in Applicazioni.
+            Al primo avvio: tasto destro sull'app → Apri → Apri.
+            La guida rapida è in **Guida-Clementine.pdf**.
+          files: |
+            dist/Clementine.zip
+            docs/Guida-Clementine.pdf

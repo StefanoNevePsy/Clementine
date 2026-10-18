@@ -45,8 +45,17 @@ enum OfficeTools {
         }
     }
 
+    /// Finds an iWork app by any of its known bundle IDs or by name in the Applications folders.
     static func appInstalled(_ bundleID: String) -> Bool {
-        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) != nil
+        let name = bundleID.components(separatedBy: ".").last ?? bundleID
+        let ids = [bundleID, "com.apple.iWork.\(name)", "com.apple.\(name)", "com.apple.\(name.lowercased())"]
+        if ids.contains(where: { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) != nil }) { return true }
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let folders = ["/Applications", "/System/Applications", "\(home)/Applications", "/Applications/iWork"]
+        if folders.contains(where: { FileManager.default.fileExists(atPath: "\($0)/\(name).app") }) { return true }
+        // Last resort: ask Launch Services by display name.
+        if let path = NSWorkspace.shared.fullPath(forApplication: name), !path.isEmpty { return true }
+        return false
     }
 
     static let soffice: String? = {

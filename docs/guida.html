@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Guida rapida di Clementine</title>
+<style>
+  @page { size: A4; margin: 16mm 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #2b2118; font-size: 10.5pt; line-height: 1.45; margin: 0; }
+  header { display: flex; align-items: center; gap: 14px; border-bottom: 3px solid #FF8A1F; padding-bottom: 10px; margin-bottom: 14px; }
+  header img { width: 64px; height: 64px; }
+  h1 { font-size: 22pt; margin: 0; color: #E8620A; }
+  header p { margin: 2px 0 0; color: #7a6656; }
+  h2 { font-size: 12.5pt; color: #E8620A; margin: 16px 0 6px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .card { background: #FFF4E6; border-radius: 10px; padding: 10px 12px; break-inside: avoid; }
+  .card h3 { margin: 0 0 4px; font-size: 10.5pt; }
+  .card p, .card ul { margin: 0; }
+  ul { padding-left: 16px; margin: 4px 0; }
+  li { margin: 2px 0; }
+  kbd { font-family: inherit; background: #fff; border: 1px solid #d9c3ab; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; font-size: 9.5pt; }
+  table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+  td { padding: 5px 6px; border-bottom: 1px solid #f0dcc6; vertical-align: top; }
+  td:first-child { white-space: nowrap; width: 30%; }
+  .note { font-size: 9.5pt; color: #6d5a49; }
+  footer { margin-top: 14px; font-size: 8.5pt; color: #9b8775; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <img src="../Resources/AppIcon.png" alt="">
+  <div>
+    <h1>Clementine</h1>
+    <p>Converti e modifica qualsiasi file sul Mac. Tutto resta sul tuo computer, niente viene caricato online.</p>
+  </div>
+</header>
+
+<h2>1 · Installazione</h2>
+<ul>
+  <li>Scarica <b>Clementine.zip</b> dalla pagina <i>Releases</i> del progetto su GitHub, decomprimilo e trascina <b>Clementine.app</b> in <b>Applicazioni</b>.</li>
+  <li>Al primo avvio fai tasto destro sull'app → <b>Apri</b> → <b>Apri</b>. Serve una volta sola, perché l'app non è firmata da uno sviluppatore registrato presso Apple.</li>
+  <li>Comparirà l'icona di Clementine nella barra dei menu in alto a destra.</li>
+  <li>Se la ruota non compare quando trascini nel Finder, consenti Clementine in <b>Impostazioni di Sistema → Privacy e sicurezza → Accessibilità</b>.</li>
+</ul>
+
+<h2>2 · La ruota</h2>
+<table>
+  <tr><td>Trascina un file tenendo <kbd>⇧</kbd></td><td>Si apre la ruota dei <b>formati</b>: rilascia il file sul formato che vuoi.</td></tr>
+  <tr><td><kbd>⇧</kbd> + <kbd>⌥</kbd></td><td>Ruota degli <b>strumenti</b>: comprimi, taglia, ritaglia, annota, oscura, metadati…</td></tr>
+  <tr><td><kbd>⇧</kbd> + <kbd>⌃</kbd></td><td>Ruota delle <b>azioni</b>: AirDrop, copia percorso, Terminale, sposta, file fluttuanti, ZIP.</td></tr>
+  <tr><td>Finestra dell'app</td><td>Trascina lì i file, oppure usa <i>Scegli file…</i>: la ruota si usa con il mouse. <kbd>Tab</kbd> cambia ruota, le frecce scelgono, <kbd>Invio</kbd> conferma, <kbd>Esc</kbd> chiude.</td></tr>
+</table>
+<p class="note">Puoi premere i tasti anche quando stai già trascinando. Con più file insieme l'operazione vale per tutti; alcune li combinano (unisci, collage, ZIP). Il risultato viene salvato <b>accanto all'originale</b>, che non viene mai modificato.</p>
+
+<h2>3 · Cosa puoi fare</h2>
+<div class="grid">
+  <div class="card"><h3>🖼️ Immagini</h3><p>JPG, PNG, HEIC, WebP, AVIF, TIFF, GIF, PDF. <b>Editor</b>: ritaglia, regola, annota, oscura, cornice. Comprimi, ridimensiona, rimuovi sfondo, testo dalle foto (OCR), QR, metadati.</p></div>
+  <div class="card"><h3>🎬 Video</h3><p>MP4, MOV, MKV, WebM, AVI, GIF. Taglia, comprimi a una dimensione, ritaglia, oscura aree, velocità, fotogrammi, dividi, unisci, estrai l'audio.</p></div>
+  <div class="card"><h3>🎧 Audio</h3><p>MP3, M4A, WAV, FLAC, OGG, Opus, AIFF. Taglia, togli i silenzi, normalizza, bip, canali, riduci il rumore, visualizzazione animata come video, tag.</p></div>
+  <div class="card"><h3>📄 PDF</h3><p>In immagini, TXT, Word, EPUB. <b>Organizza</b> le pagine trascinandole, unisci, dividi, ruota, comprimi, proteggi con password.</p></div>
+  <div class="card"><h3>📝 Documenti</h3><p>Word, Pages, RTF, HTML, Markdown, EPUB ↔ PDF/Word/EPUB/TXT. Excel, Numbers, CSV ↔ XLSX/CSV/PDF/JSON. Keynote e PowerPoint → PDF.</p></div>
+  <div class="card"><h3>🗜️ Archivi e sottotitoli</h3><p>Estrai ZIP, RAR, 7z, TAR. Crea ZIP con password. Sottotitoli SRT ↔ VTT, sposta i tempi.</p></div>
+</div>
+
+<h2>4 · Le finestre di modifica</h2>
+<ul>
+  <li><b>Taglia</b>: trascina le maniglie arancioni; <i>Togli silenzi</i> le posiziona da solo.</li>
+  <li><b>Bip</b>: trascina sulla forma d'onda per coprire un tratto con il bip. <kbd>Canc</kbd> elimina il tratto selezionato.</li>
+  <li><b>Dividi / Fotogrammi</b>: clicca sulla timeline per aggiungere un punto.</li>
+  <li><b>Ovunque</b>: <kbd>spazio</kbd> avvia o mette in pausa, <kbd>←</kbd> <kbd>→</kbd> si spostano di un secondo, <i>Salva copia</i> crea il file.</li>
+</ul>
+
+<h2>5 · Buono a sapersi</h2>
+<ul>
+  <li>Le <b>Impostazioni</b> (dal menu di Clementine) permettono di scegliere la qualità predefinita, il suono della ruota e l'avvio all'accesso.</li>
+  <li>Per i file di <b>Pages, Numbers e Keynote</b> Clementine usa le app di Apple, se installate, per un risultato identico. Senza, recupera comunque tutto il testo. La prima volta macOS chiede il permesso: rispondi <b>OK</b>.</li>
+  <li>Gli strumenti video e audio usano ffmpeg, già incluso per i Mac Apple silicon. Sui Mac Intel installalo con <code>brew install ffmpeg</code>.</li>
+</ul>
+
+<footer>Clementine · guida rapida</footer>
+</body>
+</html>
