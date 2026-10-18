@@ -60,11 +60,10 @@ enum FFmpeg {
             let pipe = Pipe()
             p.standardError = pipe
             p.standardOutput = FileHandle.nullDevice
-            var log = ""
-            let lock = NSLock()
+            let log = LogBuffer()
             pipe.fileHandleForReading.readabilityHandler = { h in
                 let chunk = String(decoding: h.availableData, as: UTF8.self)
-                lock.lock(); log += chunk; if log.count > 20000 { log = String(log.suffix(8000)) }; lock.unlock()
+                log.append(chunk)
                 if let d = duration, d > 0, let t = parseTime(after: "time=", in: chunk, last: true) {
                     job?.report(t / d)
                 }
@@ -74,7 +73,7 @@ enum FFmpeg {
                 if proc.terminationStatus == 0 {
                     cont.resume()
                 } else {
-                    lock.lock(); let tail = log.split(separator: "\n").suffix(3).joined(separator: "\n"); lock.unlock()
+                    let tail = log.tail(lines: 3)
                     cont.resume(throwing: ClementineError("ffmpeg non è riuscito a convertire il file.\n\(tail)"))
                 }
             }
@@ -102,5 +101,22 @@ private extension String {
             start = r.upperBound
         }
         return result
+    }
+}
+
+/// Thread-safe rolling buffer of ffmpeg's stderr, used for error messages.
+private final class LogBuffer: @unchecked Sendable {
+    private var text = ""
+    private let lock = NSLock()
+
+    func append(_ chunk: String) {
+        lock.lock(); defer { lock.unlock() }
+        text += chunk
+        if text.count > 20000 { text = String(text.suffix(8000)) }
+    }
+
+    func tail(lines: Int) -> String {
+        lock.lock(); defer { lock.unlock() }
+        return text.split(separator: "\n").suffix(lines).joined(separator: "\n")
     }
 }

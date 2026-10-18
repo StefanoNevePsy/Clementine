@@ -107,7 +107,7 @@ final class WheelController {
         guard let values = ParamPrompt.ask(title: op.title, params: op.params) else { return }
         if op.instant {
             Task {
-                do { _ = try await op.run(files, values, nil) } catch { await MainActor.run { NSAlert(error: error).runModal() } }
+                do { _ = try await op.run(files, values, nil) } catch { _ = await MainActor.run { NSAlert(error: error).runModal() } }
             }
             return
         }
