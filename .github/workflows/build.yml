@@ -1,0 +1,30 @@
+name: Build macOS app
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bundle ffmpeg (static, Apple silicon)
+        continue-on-error: true
+        run: |
+          curl -fsSL -o ffmpeg.zip "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip"
+          unzip -o ffmpeg.zip -d ffmpeg-dl
+          mv ffmpeg-dl/ffmpeg Resources/ffmpeg
+          chmod +x Resources/ffmpeg
+          Resources/ffmpeg -version | head -1
+
+      - name: Build
+        run: |
+          chmod +x build-app.sh
+          ./build-app.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Clementine
+          path: dist/Clementine.zip

@@ -1,0 +1,5 @@
+.build/
+dist/
+Resources/ffmpeg
+*.zip
+.DS_Store
