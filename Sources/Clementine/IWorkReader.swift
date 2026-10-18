@@ -30,7 +30,7 @@ enum IWorkReader {
                     let fields = Protobuf.fields(message.payload)
                     let kind = fields.first { $0.number == 1 }?.varint ?? 0
                     let text = fields.filter { $0.number == 3 }.compactMap { $0.string }.joined()
-                    let clean = cleanup(text)
+                    let clean = Self.cleanText(text)
                     guard !clean.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
                     if kind == 0 { body.append(clean) } else { other.append(clean) }
                 case 6005:
@@ -82,7 +82,7 @@ enum IWorkReader {
         return "1" + name
     }
 
-    private static func cleanup(_ s: String) -> String {
+    private static func cleanText(_ s: String) -> String {
         var out = ""
         for scalar in s.unicodeScalars {
             switch scalar.value {
