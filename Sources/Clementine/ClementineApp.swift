@@ -29,6 +29,8 @@ struct MenuContent: View {
             NSApp.activate(ignoringOtherApps: true)
         }
         Button("Scegli file da convertire…") { AppDelegate.shared?.pickFiles() }
+        Button("Guida rapida e scorciatoie") { GuideWindow.show() }
+        Button("Controlla aggiornamenti…") { Updater.shared.check(userInitiated: true) }
         if #available(macOS 14.0, *) {
             SettingsLink { Text("Impostazioni…") }.keyboardShortcut(",")
         } else {
@@ -53,6 +55,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppDelegate.shared = self
         dragMonitor.start()
+        Updater.shared.start()
+        if !UserDefaults.standard.bool(forKey: "seenGuide") {
+            UserDefaults.standard.set(true, forKey: "seenGuide")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { GuideWindow.show() }
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }

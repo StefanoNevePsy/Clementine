@@ -19,8 +19,11 @@ struct MainView: View {
                         .foregroundColor(.secondary)
                     Text("⇧⌥ = strumenti · ⇧⌃ = azioni")
                         .font(.caption).foregroundColor(.secondary)
-                    Button("Scegli file…") { AppDelegate.shared?.pickFiles() }
-                        .padding(.top, 4)
+                    HStack {
+                        Button("Scegli file…") { AppDelegate.shared?.pickFiles() }
+                        Button("Guida e scorciatoie") { GuideWindow.show() }
+                    }
+                    .padding(.top, 4)
                 }
                 .multilineTextAlignment(.center)
                 .padding()

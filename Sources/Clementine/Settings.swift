@@ -29,6 +29,9 @@ struct SettingsView: View {
     @AppStorage("imageQuality") private var imageQuality = 0.85
     @AppStorage("videoCRF") private var videoCRF = 23
     @AppStorage("feedback") private var feedback = true
+    @AppStorage("autoCheckUpdates") private var autoCheck = true
+    @AppStorage("autoInstallUpdates") private var autoInstall = false
+    @ObservedObject private var updater = Updater.shared
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     var body: some View {
@@ -59,6 +62,18 @@ struct SettingsView: View {
                         }
                     }
             }
+            Section("Aggiornamenti") {
+                Toggle("Controlla automaticamente le nuove versioni", isOn: $autoCheck)
+                Toggle("Installa senza chiedere (quando non ci sono lavori in corso)", isOn: $autoInstall)
+                    .disabled(!autoCheck)
+                HStack {
+                    Text("Versione \(updater.currentVersion)")
+                    if !updater.status.isEmpty { Text("· \(updater.status)").foregroundColor(.secondary) }
+                    Spacer()
+                    Button("Controlla ora") { updater.check(userInitiated: true) }.disabled(updater.busy)
+                }
+                Button("Guida rapida e scorciatoie") { GuideWindow.show() }
+            }
             Section("Strumenti esterni") {
                 LabeledContent("ffmpeg", value: FFmpeg.isAvailable ? "disponibile" : "non trovato — brew install ffmpeg")
                 LabeledContent("Pages / Numbers / Keynote", value: iWorkStatus)
@@ -66,7 +81,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 480, height: 520)
+        .frame(width: 500, height: 640)
     }
 
     private var qualityLabel: String {
