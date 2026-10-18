@@ -25,6 +25,14 @@ Se trascini più file insieme, l'operazione viene applicata a tutti; alcune li c
 - **Sottotitoli**: SRT ↔ VTT, sposta i tempi, estrai solo testo
 - **Archivi**: estrai ZIP/TAR/GZ, crea ZIP e TAR.GZ
 
+**Novità**
+- **Editor foto**: ritaglia (anche su più foto insieme), regolazioni (esposizione, luci/ombre, calore, nitidezza, rumore, grana), annotazioni (frecce, riquadri, penna, evidenziatore, testo), oscuramento sfocato o pieno, cornice con sfondo, angoli e proporzioni
+- **Video**: ritaglio e oscuramento disegnati su un fotogramma, esportazione di fotogrammi, divisione in punti precisi
+- **Audio**: visualizzazione animata (onda/barre/spettro) come video, rimozione dei silenzi, volume per canale, tag completi
+- **Pages, Numbers, Keynote, Word, Excel, PowerPoint** (tramite le app iWork gratuite o LibreOffice), **EPUB** in lettura e scrittura, **CSV ⇄ XLSX ⇄ JSON** senza app
+- **PDF**: organizzatore visuale (trascina, ruota, elimina, aggiungi pagine), compressione che mantiene il testo selezionabile
+- **Impostazioni**: qualità predefinite, suono/vibrazione della ruota, avvio all'accesso
+
 ## Installazione (senza programmare)
 
 1. Su GitHub apri la scheda **Actions** → ultima esecuzione verde di *Build macOS app* → scarica l'artefatto **Clementine**.
